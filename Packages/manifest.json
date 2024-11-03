@@ -1,6 +1,8 @@
 {
   "dependencies": {
+    "com.niantic.lightship.maps": "file:E:/com.niantic.lightship.maps-0.4.0 (1).tgz",
     "com.nianticlabs.lightship": "file:E:/ardk-upm-3.9.0.tgz",
+    "com.nianticlabs.lightship.sharedar": "file:E:/sharedar-upm-3.9.0.tgz",
     "com.unity.collab-proxy": "2.5.2",
     "com.unity.ide.rider": "3.0.31",
     "com.unity.ide.visualstudio": "2.0.22",
