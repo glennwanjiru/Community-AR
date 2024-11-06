@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI; // Required for UI Button interaction
 using UnityInput = UnityEngine.Input;
 
 namespace Niantic.Lightship.Maps.CustomAssets
@@ -20,6 +21,8 @@ namespace Niantic.Lightship.Maps.CustomAssets
         private Camera _camera; // Reference to the camera
         [SerializeField]
         private LightshipMapView _mapView; // Reference to the Lightship map view
+        [SerializeField]
+        private Button _goToLocationButton; // Reference to the button to go to current location
 
         private bool _isPinchPhase; // Indicates if a pinch gesture is occurring
         private float _lastPinchDistance; // Last distance between two fingers during a pinch
@@ -42,6 +45,12 @@ namespace Niantic.Lightship.Maps.CustomAssets
 
             // Start the GPS service
             StartCoroutine(StartGPS());
+
+            // Ensure the button is functional
+            if (_goToLocationButton != null)
+            {
+                _goToLocationButton.onClick.AddListener(GoToCurrentLocation);
+            }
         }
 
         private void Update()
@@ -165,7 +174,7 @@ namespace Niantic.Lightship.Maps.CustomAssets
             if (!Input.location.isEnabledByUser)
             {
                 Debug.LogError("GPS is not enabled in the device settings.");
-                yield break;  // Use yield break to exit if GPS is not enabled.
+                yield break;  // Exit if GPS is not enabled.
             }
 
             Input.location.Start();
@@ -189,21 +198,31 @@ namespace Niantic.Lightship.Maps.CustomAssets
             }
             else
             {
-                // Retrieve the initial GPS position
+                // Retrieve the initial GPS position and update the map
                 UpdateMapWithGPS(Input.location.lastData);
             }
         }
 
         private void UpdateMapWithGPS(LocationInfo location)
         {
-            // Here you can adjust the map view based on GPS data
-            // Set the map center to the user's GPS location
-
-            // Assuming that MapView has a method to set the map center (latitude, longitude)
-            // For example:
+            // Adjust the map view based on the user's GPS location
             Vector2 userLocation = new Vector2(location.latitude, location.longitude);
-            _mapView.SetMapCenter(userLocation); // Update map to the current GPS location
+            _mapView.SetMapCenter(userLocation); // Center the map at the user's GPS location
             Debug.Log($"GPS Location: Latitude {location.latitude}, Longitude {location.longitude}");
+        }
+
+        // This function will be called when the "Go to My Location" button is pressed
+        private void GoToCurrentLocation()
+        {
+            // Ensure the GPS is initialized before trying to go to the current location
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                UpdateMapWithGPS(Input.location.lastData); // Update the map to the current GPS location
+            }
+            else
+            {
+                Debug.LogError("GPS is not initialized or is not available.");
+            }
         }
     }
 }
