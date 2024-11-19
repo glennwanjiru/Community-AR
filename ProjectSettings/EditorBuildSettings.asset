@@ -5,6 +5,12 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/Auth.unity
+    guid: 976652faffaf69844aabb6e911e2f323
+  - enabled: 1
+    path: Assets/Scenes/MainMenu.unity
+    guid: 12905fb720f4f284f91dbb866d06e2bd
   - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
@@ -14,9 +20,12 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/Image Tracking.unity
     guid: f016f07125642c74186de7da1e30e287
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/Lables Test.unity
     guid: 448d6ee5074fe7c40a410a9001db14a3
+  - enabled: 0
+    path: Assets/Scenes/3D maps.unity
+    guid: 8c7e3937774e07446963ff377cc17130
   m_configObjects:
     Niantic.Lightship.AR.LightshipSettings: {fileID: 11400000, guid: 19cceb70641cbb9438a504aa6381ff50,
       type: 2}

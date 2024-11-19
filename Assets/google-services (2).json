@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "273519845943",
+    "project_id": "communityconnectar-8276",
+    "storage_bucket": "communityconnectar-8276.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:273519845943:android:21c58e1f74a23bdfa955b2",
+        "android_client_info": {
+          "package_name": "com.stainedcoffeecup.CCAR"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "273519845943-a9e1d7k6k8ml1e89gcn5ljcdp56crv8i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbOQve934Eks9kTgb3hu0AX8hJw2ZkDwQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "273519845943-a9e1d7k6k8ml1e89gcn5ljcdp56crv8i.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:273519845943:android:cf95f31130f8c4efa955b2",
+        "android_client_info": {
+          "package_name": "com.stainedcoffeecup.CommunityConnectAR"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "273519845943-a9e1d7k6k8ml1e89gcn5ljcdp56crv8i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbOQve934Eks9kTgb3hu0AX8hJw2ZkDwQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "273519845943-a9e1d7k6k8ml1e89gcn5ljcdp56crv8i.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
