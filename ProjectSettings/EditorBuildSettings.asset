@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/MainMenu.unity
     guid: 12905fb720f4f284f91dbb866d06e2bd
+  - enabled: 1
+    path: Assets/Scenes/AR Nav.unity
+    guid: 18df42c6ae442824ab77b1cc65ff5827
   - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
