@@ -23,6 +23,7 @@ public class ARNav : MonoBehaviour
     [SerializeField] private ARWorldPositioningManager _positioningManager;
 
     [SerializeField] private UserLatLong _currentUserLocation;
+    [SerializeField] private GameObject _directionPointer; // 3D Pointer object to show direction
 
     private GameObject _currentPlacedObject;
     private List<GameObject> _currentRecommendations = new List<GameObject>();
@@ -46,31 +47,16 @@ public class ARNav : MonoBehaviour
         // Add listener to search button
         _searchButton.onClick.AddListener(SearchAndPlaceLocation);
 
+        // Validate pointer reference
+        if (_directionPointer == null)
+        {
+            Debug.LogError("Direction Pointer is not assigned!");
+        }
+
         // Original positioning manager setup
         if (_positioningManager != null)
         {
             _positioningManager.OnStatusChanged += OnStatusChanged;
-        }
-
-        // Ensure that recommendation container is correctly set up
-        if (_recommendationContainer != null)
-        {
-            RectTransform containerRect = _recommendationContainer.GetComponent<RectTransform>();
-            if (containerRect != null)
-            {
-                // Ensure a Vertical Layout Group is attached for layout management
-                if (_recommendationContainer.GetComponent<VerticalLayoutGroup>() == null)
-                {
-                    _recommendationContainer.AddComponent<VerticalLayoutGroup>();
-                }
-
-                // Ensure Content Size Fitter is attached
-                if (_recommendationContainer.GetComponent<ContentSizeFitter>() == null)
-                {
-                    ContentSizeFitter fitter = _recommendationContainer.AddComponent<ContentSizeFitter>();
-                    fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-                }
-            }
         }
     }
 
@@ -79,7 +65,6 @@ public class ARNav : MonoBehaviour
         Debug.Log("Status changed to " + status);
 
         // Update current user location when status changes
-        // You may need to replace this with the correct status check
         _currentUserLocation = new UserLatLong
         {
             userLatitude = Input.location.lastData.latitude,
@@ -95,7 +80,6 @@ public class ARNav : MonoBehaviour
         // If search text is too short, don't show recommendations
         if (string.IsNullOrWhiteSpace(searchText) || searchText.Length < 2)
         {
-            // Hide recommendation container if no search or if input is empty
             _recommendationContainer.SetActive(false);
             return;
         }
@@ -106,10 +90,9 @@ public class ARNav : MonoBehaviour
         // Find matching locations
         var matchingLocations = _locationDatabase
             .Where(loc => loc.locationName.ToLower().Contains(searchText.ToLower()))
-            .Take(5) // Limit to 5 recommendations
+            .Take(5)
             .ToList();
 
-        // If no recommendations found, hide the container
         if (matchingLocations.Count == 0)
         {
             _recommendationContainer.SetActive(false);
@@ -119,17 +102,12 @@ public class ARNav : MonoBehaviour
         // Create recommendation items
         foreach (var location in matchingLocations)
         {
-            // Use Instantiate with the parent transform
             GameObject recommendationItem = Instantiate(_recommendationItemPrefab, _recommendationContainer.transform, false);
-            Debug.Log($"Instantiated: {recommendationItem.name}");
-
-            // Configure the recommendation item
             Text recommendationText = recommendationItem.GetComponentInChildren<Text>();
             if (recommendationText != null)
             {
                 recommendationText.text = location.locationName;
 
-                // Add click listener to select this location
                 Button itemButton = recommendationItem.GetComponent<Button>();
                 if (itemButton != null)
                 {
@@ -137,32 +115,22 @@ public class ARNav : MonoBehaviour
                 }
             }
 
-            // Add to tracking list
             _currentRecommendations.Add(recommendationItem);
         }
 
-        // Force layout rebuild after new items are added
         LayoutRebuilder.ForceRebuildLayoutImmediate(_recommendationContainer.GetComponent<RectTransform>());
     }
 
     private void SelectRecommendation(LocationData location)
     {
-        // Set the input field text to the selected location
         _searchInputField.text = location.locationName;
-
-        // Clear recommendations
         ClearRecommendations();
-
-        // Hide the recommendation container after selection
         _recommendationContainer.SetActive(false);
-
-        // Trigger search to place the object
         SearchAndPlaceLocation();
     }
 
     private void ClearRecommendations()
     {
-        // Destroy all existing recommendation items
         foreach (var item in _currentRecommendations)
         {
             Destroy(item);
@@ -172,30 +140,22 @@ public class ARNav : MonoBehaviour
 
     public void SearchAndPlaceLocation()
     {
-        // Clear previous object if exists
         if (_currentPlacedObject != null)
         {
             Destroy(_currentPlacedObject);
         }
 
-        // Clear recommendations
         ClearRecommendations();
-
         string searchQuery = _searchInputField.text.Trim().ToLower();
 
-        // Find matching location
         LocationData matchedLocation = _locationDatabase
             .FirstOrDefault(loc => loc.locationName.ToLower().Contains(searchQuery));
 
         if (matchedLocation != null)
         {
-            // Select a random prefab if multiple exist
             GameObject selectedPrefab = _placePrefabs[_locationDatabase.IndexOf(matchedLocation) % _placePrefabs.Count];
-
-            // Instantiate object at location
             _currentPlacedObject = Instantiate(selectedPrefab);
 
-            // Position the object
             _objectHelper.AddOrUpdateObject(
                 _currentPlacedObject,
                 matchedLocation.location.userLatitude,
@@ -204,11 +164,12 @@ public class ARNav : MonoBehaviour
                 Quaternion.identity
             );
 
-            Debug.Log($"Added {_currentPlacedObject.name} with latitude {matchedLocation.location.userLatitude} and {matchedLocation.location.userLongitude}");
+            Debug.Log($"Added {_currentPlacedObject.name} at {matchedLocation.location.userLatitude}, {matchedLocation.location.userLongitude}");
 
-            // Calculate and display distance
             float distance = CalculateDistance(_currentUserLocation, matchedLocation.location);
             _distanceText.text = $"Distance: {distance:F2} km to {matchedLocation.locationName}";
+
+            UpdatePointerDirection(matchedLocation.location);
         }
         else
         {
@@ -216,9 +177,25 @@ public class ARNav : MonoBehaviour
         }
     }
 
+    private void UpdatePointerDirection(UserLatLong destination)
+    {
+        if (_directionPointer == null || _currentUserLocation.userLatitude == 0 || _currentUserLocation.userLongitude == 0)
+        {
+            Debug.LogWarning("Cannot update direction pointer due to missing data or pointer object.");
+            return;
+        }
+
+        Vector3 userPosition = new Vector3((float)_currentUserLocation.userLatitude, 0, (float)_currentUserLocation.userLongitude);
+        Vector3 destinationPosition = new Vector3((float)destination.userLatitude, 0, (float)destination.userLongitude);
+        Vector3 direction = (destinationPosition - userPosition).normalized;
+
+        Quaternion targetRotation = Quaternion.LookRotation(direction);
+        _directionPointer.transform.rotation = targetRotation;
+    }
+
     private float CalculateDistance(UserLatLong start, UserLatLong end)
     {
-        const double EarthRadius = 6371; // Earth's radius in kilometers
+        const double EarthRadius = 6371;
 
         var lat1 = ToRadians(start.userLatitude);
         var lon1 = ToRadians(start.userLongitude);
