@@ -12,82 +12,228 @@ public class ARNav : MonoBehaviour
     [SerializeField] private List<LocationData> _locationDatabase = new List<LocationData>();
     [SerializeField] private List<GameObject> _placePrefabs = new List<GameObject>();
 
-    [Header("Legacy UI References")]
+    [Header("UI References")]
     [SerializeField] private InputField _searchInputField;
     [SerializeField] private Text _distanceText;
     [SerializeField] private Button _searchButton;
     [SerializeField] private GameObject _recommendationContainer;
     [SerializeField] private GameObject _recommendationItemPrefab;
+    [SerializeField] private Toggle _gyroscopeToggle;
+    [SerializeField] private Text _statusText;
 
+    [Header("AR Components")]
     [SerializeField] private ARWorldPositioningObjectHelper _objectHelper;
     [SerializeField] private ARWorldPositioningManager _positioningManager;
-
     [SerializeField] private UserLatLong _currentUserLocation;
-    [SerializeField] private GameObject _directionPointer; // 3D Pointer object to show direction
+
+    [Header("Direction Indicator")]
+    [SerializeField] private GameObject _directionIndicator;
+    [SerializeField] private float _rotationSmoothSpeed = 5f;
+    [SerializeField] private bool _useGyroscope = true;
 
     private GameObject _currentPlacedObject;
     private List<GameObject> _currentRecommendations = new List<GameObject>();
+    private Gyroscope _gyro;
+    private bool _gyroEnabled;
+    private Quaternion _baseRotation;
+    private bool _isInitialized;
 
     void Start()
     {
-        // Validate references
+        InitializeComponents();
+        SetupUIElements();
+        InitializeGyroscope();
+        SetupPositioningManager();
+    }
+
+    private void InitializeComponents()
+    {
+        // Validate essential components
         if (_searchInputField == null || _distanceText == null ||
-            _recommendationContainer == null || _recommendationItemPrefab == null)
+            _recommendationContainer == null || _recommendationItemPrefab == null ||
+            _directionIndicator == null)
         {
-            Debug.LogError("Missing UI references in ARNav script!");
+            Debug.LogError("Missing required components in ARNav script!");
             return;
         }
 
-        // Initially hide the recommendation container
+        _isInitialized = true;
         _recommendationContainer.SetActive(false);
+    }
 
-        // Add listener to search input for real-time recommendations
+    private void SetupUIElements()
+    {
+        // Setup search functionality
         _searchInputField.onValueChanged.AddListener(UpdateRecommendations);
-
-        // Add listener to search button
         _searchButton.onClick.AddListener(SearchAndPlaceLocation);
 
-        // Validate pointer reference
-        if (_directionPointer == null)
+        // Setup gyroscope toggle if available
+        if (_gyroscopeToggle != null)
         {
-            Debug.LogError("Direction Pointer is not assigned!");
+            _gyroscopeToggle.isOn = _useGyroscope;
+            _gyroscopeToggle.onValueChanged.AddListener((value) => ToggleGyroscope());
         }
 
-        // Original positioning manager setup
+        // Setup recommendation container
+        SetupRecommendationContainer();
+    }
+
+    private void SetupRecommendationContainer()
+    {
+        if (_recommendationContainer != null)
+        {
+            RectTransform containerRect = _recommendationContainer.GetComponent<RectTransform>();
+            if (containerRect != null)
+            {
+                // Add VerticalLayoutGroup if missing
+                if (_recommendationContainer.GetComponent<VerticalLayoutGroup>() == null)
+                {
+                    VerticalLayoutGroup vlg = _recommendationContainer.AddComponent<VerticalLayoutGroup>();
+                    vlg.spacing = 5f;
+                    vlg.padding = new RectOffset(5, 5, 5, 5);
+                }
+
+                // Add ContentSizeFitter if missing
+                if (_recommendationContainer.GetComponent<ContentSizeFitter>() == null)
+                {
+                    ContentSizeFitter fitter = _recommendationContainer.AddComponent<ContentSizeFitter>();
+                    fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                }
+            }
+        }
+    }
+
+    private void InitializeGyroscope()
+    {
+        if (SystemInfo.supportsGyroscope)
+        {
+            _gyro = Input.gyro;
+            _gyro.enabled = true;
+            _gyroEnabled = true;
+            _baseRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            UpdateStatusText("Gyroscope initialized");
+        }
+        else
+        {
+            _gyroEnabled = false;
+            _useGyroscope = false;
+            if (_gyroscopeToggle != null)
+            {
+                _gyroscopeToggle.isOn = false;
+                _gyroscopeToggle.interactable = false;
+            }
+            UpdateStatusText("Gyroscope not available");
+        }
+    }
+
+    private void SetupPositioningManager()
+    {
         if (_positioningManager != null)
         {
             _positioningManager.OnStatusChanged += OnStatusChanged;
         }
+        else
+        {
+            UpdateStatusText("Positioning manager not found");
+        }
+    }
+
+    private void UpdateStatusText(string message)
+    {
+        if (_statusText != null)
+        {
+            _statusText.text = message;
+        }
+        Debug.Log(message);
     }
 
     private void OnStatusChanged(WorldPositioningStatus status)
     {
-        Debug.Log("Status changed to " + status);
+        UpdateStatusText("Position status: " + status);
 
-        // Update current user location when status changes
-        _currentUserLocation = new UserLatLong
+        if (Input.location.status == LocationServiceStatus.Running)
         {
-            userLatitude = Input.location.lastData.latitude,
-            userLongitude = Input.location.lastData.longitude
-        };
+            _currentUserLocation = new UserLatLong
+            {
+                userLatitude = Input.location.lastData.latitude,
+                userLongitude = Input.location.lastData.longitude
+            };
+
+            if (_currentPlacedObject != null)
+            {
+                UpdateDirectionIndicator();
+            }
+        }
+    }
+
+    private void Update()
+    {
+        if (!_isInitialized) return;
+
+        if (_currentPlacedObject != null && _directionIndicator != null)
+        {
+            UpdateDirectionIndicator();
+        }
+    }
+
+    private void UpdateDirectionIndicator()
+    {
+        Vector3 directionToDestination = GetDirectionToDestination();
+
+        if (directionToDestination == Vector3.zero)
+            return;
+
+        Quaternion targetRotation = Quaternion.LookRotation(directionToDestination);
+
+        if (_useGyroscope && _gyroEnabled)
+        {
+            Quaternion deviceOrientation = GetDeviceOrientation();
+            Quaternion finalRotation = deviceOrientation * targetRotation;
+
+            _directionIndicator.transform.rotation = Quaternion.Slerp(
+                _directionIndicator.transform.rotation,
+                finalRotation,
+                Time.deltaTime * _rotationSmoothSpeed
+            );
+        }
+        else
+        {
+            _directionIndicator.transform.rotation = Quaternion.Slerp(
+                _directionIndicator.transform.rotation,
+                targetRotation,
+                Time.deltaTime * _rotationSmoothSpeed
+            );
+        }
+    }
+
+    private Quaternion GetDeviceOrientation()
+    {
+        Quaternion gyroRotation = Input.gyro.attitude;
+
+        // Convert from right-handed to left-handed coordinate system
+        Quaternion correctedGyroRotation = new Quaternion(
+            gyroRotation.x,
+            gyroRotation.y,
+            -gyroRotation.z,
+            -gyroRotation.w
+        );
+
+        return _baseRotation * correctedGyroRotation;
     }
 
     private void UpdateRecommendations(string searchText)
     {
-        // Clear previous recommendations
         ClearRecommendations();
 
-        // If search text is too short, don't show recommendations
         if (string.IsNullOrWhiteSpace(searchText) || searchText.Length < 2)
         {
             _recommendationContainer.SetActive(false);
             return;
         }
 
-        // Show the recommendation container when typing starts
         _recommendationContainer.SetActive(true);
 
-        // Find matching locations
         var matchingLocations = _locationDatabase
             .Where(loc => loc.locationName.ToLower().Contains(searchText.ToLower()))
             .Take(5)
@@ -99,10 +245,10 @@ public class ARNav : MonoBehaviour
             return;
         }
 
-        // Create recommendation items
         foreach (var location in matchingLocations)
         {
             GameObject recommendationItem = Instantiate(_recommendationItemPrefab, _recommendationContainer.transform, false);
+
             Text recommendationText = recommendationItem.GetComponentInChildren<Text>();
             if (recommendationText != null)
             {
@@ -146,8 +292,8 @@ public class ARNav : MonoBehaviour
         }
 
         ClearRecommendations();
-        string searchQuery = _searchInputField.text.Trim().ToLower();
 
+        string searchQuery = _searchInputField.text.Trim().ToLower();
         LocationData matchedLocation = _locationDatabase
             .FirstOrDefault(loc => loc.locationName.ToLower().Contains(searchQuery));
 
@@ -164,38 +310,63 @@ public class ARNav : MonoBehaviour
                 Quaternion.identity
             );
 
-            Debug.Log($"Added {_currentPlacedObject.name} at {matchedLocation.location.userLatitude}, {matchedLocation.location.userLongitude}");
-
             float distance = CalculateDistance(_currentUserLocation, matchedLocation.location);
             _distanceText.text = $"Distance: {distance:F2} km to {matchedLocation.locationName}";
 
-            UpdatePointerDirection(matchedLocation.location);
+            UpdateDirectionIndicator();
+            UpdateStatusText($"Placed object at {matchedLocation.locationName}");
         }
         else
         {
             _distanceText.text = "Location not found";
+            UpdateStatusText("Location not found in database");
         }
     }
 
-    private void UpdatePointerDirection(UserLatLong destination)
+    private Vector3 GetDirectionToDestination()
     {
-        if (_directionPointer == null || _currentUserLocation.userLatitude == 0 || _currentUserLocation.userLongitude == 0)
+        LocationData matchedLocation = _locationDatabase.FirstOrDefault(loc =>
+            loc.locationName.ToLower().Contains(_searchInputField.text.Trim().ToLower()));
+
+        if (matchedLocation != null)
         {
-            Debug.LogWarning("Cannot update direction pointer due to missing data or pointer object.");
-            return;
+            Vector3 cameraPosition = Camera.main.transform.position;
+            Vector3 destinationPosition = new Vector3(
+                (float)matchedLocation.location.userLongitude,
+                cameraPosition.y,
+                (float)matchedLocation.location.userLatitude
+            );
+
+            Vector3 direction = destinationPosition - cameraPosition;
+            direction.y = 0;
+            return direction.normalized;
         }
+        return Vector3.zero;
+    }
 
-        Vector3 userPosition = new Vector3((float)_currentUserLocation.userLatitude, 0, (float)_currentUserLocation.userLongitude);
-        Vector3 destinationPosition = new Vector3((float)destination.userLatitude, 0, (float)destination.userLongitude);
-        Vector3 direction = (destinationPosition - userPosition).normalized;
-
-        Quaternion targetRotation = Quaternion.LookRotation(direction);
-        _directionPointer.transform.rotation = targetRotation;
+    public void ToggleGyroscope()
+    {
+        if (SystemInfo.supportsGyroscope)
+        {
+            _useGyroscope = !_useGyroscope;
+            if (_useGyroscope)
+            {
+                _gyro.enabled = true;
+                _gyroEnabled = true;
+                UpdateStatusText("Gyroscope enabled");
+            }
+            else
+            {
+                _gyro.enabled = false;
+                _gyroEnabled = false;
+                UpdateStatusText("Gyroscope disabled");
+            }
+        }
     }
 
     private float CalculateDistance(UserLatLong start, UserLatLong end)
     {
-        const double EarthRadius = 6371;
+        const double EarthRadius = 6371; // km
 
         var lat1 = ToRadians(start.userLatitude);
         var lon1 = ToRadians(start.userLongitude);
@@ -217,6 +388,14 @@ public class ARNav : MonoBehaviour
     {
         return degrees * Math.PI / 180;
     }
+
+    private void OnDestroy()
+    {
+        if (_positioningManager != null)
+        {
+            _positioningManager.OnStatusChanged -= OnStatusChanged;
+        }
+    }
 }
 
 [System.Serializable]
@@ -227,8 +406,13 @@ public class LocationData
 }
 
 [System.Serializable]
-public struct UserLatLong
+public class UserLatLong
 {
     public double userLatitude;
     public double userLongitude;
+
+    public Vector3 ToWorldPosition()
+    {
+        return new Vector3((float)userLongitude, 0f, (float)userLatitude);
+    }
 }
