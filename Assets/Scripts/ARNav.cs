@@ -82,8 +82,8 @@ public class ARNav : MonoBehaviour
         // You may need to replace this with the correct status check
         _currentUserLocation = new UserLatLong
         {
-            userLatitude = 0, // Replace with actual latitude retrieval method
-            userLongitude = 0 // Replace with actual longitude retrieval method
+            userLatitude = Input.location.lastData.latitude,
+            userLongitude = Input.location.lastData.longitude
         };
     }
 
