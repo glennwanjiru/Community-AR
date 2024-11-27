@@ -48,7 +48,6 @@ public class ARNav : MonoBehaviour
 
     private void InitializeComponents()
     {
-        // Validate essential components
         if (_searchInputField == null || _distanceText == null ||
             _recommendationContainer == null || _recommendationItemPrefab == null ||
             _directionIndicator == null)
@@ -63,42 +62,34 @@ public class ARNav : MonoBehaviour
 
     private void SetupUIElements()
     {
-        // Setup search functionality
         _searchInputField.onValueChanged.AddListener(UpdateRecommendations);
         _searchButton.onClick.AddListener(SearchAndPlaceLocation);
 
-        // Setup gyroscope toggle if available
         if (_gyroscopeToggle != null)
         {
             _gyroscopeToggle.isOn = _useGyroscope;
             _gyroscopeToggle.onValueChanged.AddListener((value) => ToggleGyroscope());
         }
 
-        // Setup recommendation container
         SetupRecommendationContainer();
     }
 
     private void SetupRecommendationContainer()
     {
-        if (_recommendationContainer != null)
+        RectTransform containerRect = _recommendationContainer.GetComponent<RectTransform>();
+        if (containerRect != null)
         {
-            RectTransform containerRect = _recommendationContainer.GetComponent<RectTransform>();
-            if (containerRect != null)
+            if (_recommendationContainer.GetComponent<VerticalLayoutGroup>() == null)
             {
-                // Add VerticalLayoutGroup if missing
-                if (_recommendationContainer.GetComponent<VerticalLayoutGroup>() == null)
-                {
-                    VerticalLayoutGroup vlg = _recommendationContainer.AddComponent<VerticalLayoutGroup>();
-                    vlg.spacing = 5f;
-                    vlg.padding = new RectOffset(5, 5, 5, 5);
-                }
+                VerticalLayoutGroup vlg = _recommendationContainer.AddComponent<VerticalLayoutGroup>();
+                vlg.spacing = 5f;
+                vlg.padding = new RectOffset(5, 5, 5, 5);
+            }
 
-                // Add ContentSizeFitter if missing
-                if (_recommendationContainer.GetComponent<ContentSizeFitter>() == null)
-                {
-                    ContentSizeFitter fitter = _recommendationContainer.AddComponent<ContentSizeFitter>();
-                    fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-                }
+            if (_recommendationContainer.GetComponent<ContentSizeFitter>() == null)
+            {
+                ContentSizeFitter fitter = _recommendationContainer.AddComponent<ContentSizeFitter>();
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
         }
     }
@@ -175,30 +166,57 @@ public class ARNav : MonoBehaviour
         {
             UpdateDirectionIndicator();
         }
+
+        UpdateDynamicDistance();
+    }
+
+    private void UpdateDynamicDistance()
+    {
+        if (_currentPlacedObject != null && _currentUserLocation != null)
+        {
+            string searchQuery = _searchInputField.text.Trim().ToLower();
+            LocationData matchedLocation = _locationDatabase
+                .FirstOrDefault(loc => loc.locationName.ToLower().Contains(searchQuery));
+
+            if (matchedLocation != null)
+            {
+                float distance = CalculateDistance(_currentUserLocation, matchedLocation.location);
+                _distanceText.text = $"Distance: {distance:F2} km to {matchedLocation.locationName}";
+            }
+        }
     }
 
     private void UpdateDirectionIndicator()
     {
-        Vector3 directionToDestination = GetDirectionToDestination();
-
-        if (directionToDestination == Vector3.zero)
+        if (_currentPlacedObject == null || _currentUserLocation == null)
             return;
 
-        Quaternion targetRotation = Quaternion.LookRotation(directionToDestination);
+        // Get the direction vector to the target location
+        Vector3 targetPosition = _currentPlacedObject.transform.position;
+        Vector3 userPosition = Camera.main.transform.position;
+        Vector3 directionToTarget = (targetPosition - userPosition).normalized;
+
+        // Adjust for the Y-axis plane (ignore elevation differences)
+        directionToTarget.y = 0;
+
+        // Get the rotation needed to point towards the target
+        Quaternion targetRotation = Quaternion.LookRotation(directionToTarget);
 
         if (_useGyroscope && _gyroEnabled)
         {
+            // Apply gyroscope orientation to adjust indicator
             Quaternion deviceOrientation = GetDeviceOrientation();
-            Quaternion finalRotation = deviceOrientation * targetRotation;
+            Quaternion adjustedRotation = targetRotation * Quaternion.Inverse(deviceOrientation);
 
             _directionIndicator.transform.rotation = Quaternion.Slerp(
                 _directionIndicator.transform.rotation,
-                finalRotation,
+                adjustedRotation,
                 Time.deltaTime * _rotationSmoothSpeed
             );
         }
         else
         {
+            // Rotate the indicator without gyroscope adjustment
             _directionIndicator.transform.rotation = Quaternion.Slerp(
                 _directionIndicator.transform.rotation,
                 targetRotation,
@@ -207,11 +225,11 @@ public class ARNav : MonoBehaviour
         }
     }
 
+
     private Quaternion GetDeviceOrientation()
     {
         Quaternion gyroRotation = Input.gyro.attitude;
 
-        // Convert from right-handed to left-handed coordinate system
         Quaternion correctedGyroRotation = new Quaternion(
             gyroRotation.x,
             gyroRotation.y,
@@ -318,101 +336,53 @@ public class ARNav : MonoBehaviour
         }
         else
         {
-            _distanceText.text = "Location not found";
-            UpdateStatusText("Location not found in database");
+            _distanceText.text = "No matching location found!";
         }
     }
 
     private Vector3 GetDirectionToDestination()
     {
-        LocationData matchedLocation = _locationDatabase.FirstOrDefault(loc =>
-            loc.locationName.ToLower().Contains(_searchInputField.text.Trim().ToLower()));
-
-        if (matchedLocation != null)
-        {
-            Vector3 cameraPosition = Camera.main.transform.position;
-            Vector3 destinationPosition = new Vector3(
-                (float)matchedLocation.location.userLongitude,
-                cameraPosition.y,
-                (float)matchedLocation.location.userLatitude
-            );
-
-            Vector3 direction = destinationPosition - cameraPosition;
-            direction.y = 0;
-            return direction.normalized;
-        }
-        return Vector3.zero;
+        Vector3 direction = _currentPlacedObject.transform.position - Camera.main.transform.position;
+        return new Vector3(direction.x, 0, direction.z).normalized;
     }
 
-    public void ToggleGyroscope()
+    private void ToggleGyroscope()
     {
-        if (SystemInfo.supportsGyroscope)
-        {
-            _useGyroscope = !_useGyroscope;
-            if (_useGyroscope)
-            {
-                _gyro.enabled = true;
-                _gyroEnabled = true;
-                UpdateStatusText("Gyroscope enabled");
-            }
-            else
-            {
-                _gyro.enabled = false;
-                _gyroEnabled = false;
-                UpdateStatusText("Gyroscope disabled");
-            }
-        }
+        _useGyroscope = !_useGyroscope;
     }
 
-    private float CalculateDistance(UserLatLong start, UserLatLong end)
+    private float CalculateDistance(UserLatLong userLocation, UserLatLong destinationLocation)
     {
-        const double EarthRadius = 6371; // km
+        float lat1 = Mathf.Deg2Rad * (float)userLocation.userLatitude;
+        float lon1 = Mathf.Deg2Rad * (float)userLocation.userLongitude;
+        float lat2 = Mathf.Deg2Rad * (float)destinationLocation.userLatitude;
+        float lon2 = Mathf.Deg2Rad * (float)destinationLocation.userLongitude;
 
-        var lat1 = ToRadians(start.userLatitude);
-        var lon1 = ToRadians(start.userLongitude);
-        var lat2 = ToRadians(end.userLatitude);
-        var lon2 = ToRadians(end.userLongitude);
+        float earthRadiusKm = 6371.0f;
 
-        var dlat = lat2 - lat1;
-        var dlon = lon2 - lon1;
+        float dLat = lat2 - lat1;
+        float dLon = lon2 - lon1;
 
-        var a = Math.Sin(dlat / 2) * Math.Sin(dlat / 2) +
-                Math.Cos(lat1) * Math.Cos(lat2) *
-                Math.Sin(dlon / 2) * Math.Sin(dlon / 2);
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        float a = Mathf.Pow(Mathf.Sin(dLat / 2), 2) +
+                  Mathf.Cos(lat1) * Mathf.Cos(lat2) *
+                  Mathf.Pow(Mathf.Sin(dLon / 2), 2);
 
-        return (float)(EarthRadius * c);
-    }
+        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
 
-    private double ToRadians(double degrees)
-    {
-        return degrees * Math.PI / 180;
-    }
-
-    private void OnDestroy()
-    {
-        if (_positioningManager != null)
-        {
-            _positioningManager.OnStatusChanged -= OnStatusChanged;
-        }
+        return earthRadiusKm * c;
     }
 }
 
-[System.Serializable]
+[Serializable]
 public class LocationData
 {
     public string locationName;
     public UserLatLong location;
 }
 
-[System.Serializable]
+[Serializable]
 public class UserLatLong
 {
     public double userLatitude;
     public double userLongitude;
-
-    public Vector3 ToWorldPosition()
-    {
-        return new Vector3((float)userLongitude, 0f, (float)userLatitude);
-    }
 }
